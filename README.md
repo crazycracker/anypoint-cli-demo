@@ -1,87 +1,132 @@
 # anypoint-cli-demo
 
-Production-ready assets for MuleSoft observability in Kibana, with **live real-time data fetched from CloudHub APIs**.
+Production-ready Kibana assets to monitor **all MuleSoft environments, APIs, schedules, live status, and historical execution health**.
 
-## What is included
+## What you get
 
-- `kibana/mulesoft-job-status-dashboard.ndjson` – dashboard + visualizations + data view
-- `kibana/mulesoft-index-template.json` – Elasticsearch index template
-- `kibana/sample-mulesoft-job-run.json` – normalized sample event
-- `scripts/cloudhub_realtime_collector.py` – real-time CloudHub API collector -> Elasticsearch
-- `.env.example` – environment configuration template
+This package is designed as an operations dashboard (NOC/SRE friendly) and includes:
 
-## Architecture (live)
+- Global visibility across **all environments** (`dev`, `qa`, `uat`, `prod`, etc.)
+- Visibility across **all APIs inside each environment**
+- Visibility across **all schedules** in APIs (if present), including enabled/disabled state and run status
+- **Live status** (running/failed/success) and **historical trends**
+- Failure/error surfacing with top failing environments/APIs/jobs/schedules
+- Time-window analysis using Kibana time picker (Last 15m, 1h, 24h, custom)
+- Ready-to-create alerting recommendations
 
-1. Collector authenticates with Anypoint using **client_id/client_secret**.
-2. Collector polls CloudHub APIs for:
-   - all environments
-   - all APIs in each environment
-   - schedules (if available)
-   - job/run history and current status
-3. Collector normalizes events into `mulesoft-job-runs-*`.
-4. Kibana dashboard reads the index in real time via time picker.
+## Files
 
-## 1) Configure credentials and endpoints
+- `kibana/mulesoft-job-status-dashboard.ndjson`  
+  Importable Kibana saved objects (data view + visualizations + dashboard).
+- `kibana/sample-mulesoft-job-run.json`  
+  Example event document for job/schedule execution.
+- `kibana/mulesoft-index-template.json`  
+  Suggested Elasticsearch index template for stable field mappings.
 
-Copy `.env.example` and provide your real values:
+## Canonical index and data model
 
-```bash
-cp .env.example .env
+Index pattern:
+
+- `mulesoft-job-runs-*`
+
+Core fields:
+
+- `@timestamp` (`date`) – event time
+- `environment` (`keyword`) – env name
+- `organization.id` (`keyword`) – Anypoint org
+- `api.id` (`keyword`) / `api.name` (`keyword`)
+- `job.id` (`keyword`) / `job.name` (`keyword`)
+- `job.type` (`keyword`) – `SCHEDULED|ON_DEMAND|EVENT_DRIVEN`
+- `job.status` (`keyword`) – `SUCCESS|RUNNING|FAILED|CANCELLED|RETRYING|MISSED`
+- `job.duration_ms` (`long`)
+- `schedule.id` (`keyword`) / `schedule.name` (`keyword`)
+- `schedule.cron` (`keyword`)
+- `schedule.enabled` (`boolean`)
+- `schedule.status` (`keyword`) – `ON_TIME|LATE|MISSED|PAUSED`
+- `error.code` (`keyword`) / `error.message` (`text`)
+- `worker.id` (`keyword`) / `worker.region` (`keyword`)
+- `trace.id` (`keyword`) – for deep debugging
+
+## Dashboard panels included
+
+The dashboard **MuleSoft Unified Job & Schedule Operations** includes:
+
+1. Job Executions Over Time (split by status)
+2. Failure Trend Over Time (FAILED only)
+3. Environment Coverage (top environments)
+4. API Coverage (top APIs)
+5. Schedule Health Distribution (ON_TIME/LATE/MISSED/PAUSED)
+6. Top Failed APIs
+7. Top Failed Schedules
+8. Latest Executions (table/search)
+
+These panels are all time-filter aware, so changing Kibana’s time picker updates everything live.
+
+## Import
+
+1. Open **Kibana → Stack Management → Saved Objects**
+2. Click **Import**
+3. Upload `kibana/mulesoft-job-status-dashboard.ndjson`
+4. Open dashboard: **MuleSoft Unified Job & Schedule Operations**
+
+## Required ingestion behavior (important)
+
+To truly show *all* environments/APIs/schedules:
+
+- Emit one document per execution attempt (job run)
+- Populate `environment`, `api.*`, and `job.*` always
+- Populate `schedule.*` for scheduled jobs
+- Emit failures with both `job.status="FAILED"` and `error.*`
+- Emit schedule-monitor events for `MISSED` or `LATE` schedules even if no run occurred
+
+## Suggested live filters
+
+- Environment-specific:
+
+```kql
+environment : "prod"
 ```
 
-Set at minimum:
+- API-specific:
 
-- `ANYPOINT_CLIENT_ID`
-- `ANYPOINT_CLIENT_SECRET`
-- `ANYPOINT_ORG_ID`
-- `ELASTIC_URL`
-- `ELASTIC_API_KEY`
-
-You can also override endpoint templates if your tenant uses different CloudHub API routes.
-
-## 2) Install index template
-
-Install `kibana/mulesoft-index-template.json` into Elasticsearch before starting ingestion.
-
-## 3) Run live collector
-
-```bash
-set -a
-source .env
-set +a
-python3 scripts/cloudhub_realtime_collector.py
+```kql
+api.name : "customer-orders-api"
 ```
 
-The collector continuously polls CloudHub and indexes new/updated runs.
+- Failing schedules:
 
-## 4) Import Kibana assets
+```kql
+job.status : "FAILED" or schedule.status : ("LATE" or "MISSED")
+```
 
-1. Kibana -> Stack Management -> Saved Objects
-2. Import `kibana/mulesoft-job-status-dashboard.ndjson`
-3. Open dashboard **MuleSoft Unified Job & Schedule Operations**
-4. Use Kibana time picker to change live/historical window (15m, 1h, 24h, custom)
+- Running right now:
 
-## Dashboard outcomes
+```kql
+job.status : "RUNNING"
+```
 
-The dashboard supports:
+## Alerts you should add (recommended)
 
-- Environment-wide visibility
-- API-wide visibility inside each environment
-- Schedule visibility + schedule health
-- Live status (`RUNNING`, `FAILED`, `SUCCESS`, etc.)
-- Historical failure and execution trends
-- Top failed APIs/schedules
-- Latest execution history table
+1. **Failed job detection**  
+   Query: `job.status:"FAILED"` in last 5m, condition `count > 0`
+2. **Missed schedules**  
+   Query: `schedule.status:"MISSED"` in last 15m, condition `count > 0`
+3. **Failure-rate spike**  
+   Rule based on ratio: FAILED / total > threshold (e.g. 5%)
+4. **No data from critical API**  
+   Rule on `api.name` with no docs in expected interval
+5. **Long-running jobs**  
+   Query on `job.duration_ms` > SLA threshold
 
-## Recommended alerts
+## Additional improvements you may want (added as requested)
 
-- `job.status:"FAILED"` in last 5m
-- `schedule.status:"MISSED"` in last 15m
-- Failure-rate spike threshold
-- No-data alert for critical APIs
-- SLA breach on `job.duration_ms`
+If you want full enterprise observability, also add:
 
-## Notes
+- SLO widgets (success rate, p95/p99 duration)
+- Deployment markers (overlay release versions)
+- Retry visibility (`job.attempt`, `job.max_attempts`)
+- Correlation from dashboard to logs/traces by `trace.id`
+- Tenant-level breakdown if multi-tenant APIs are used
+- Cost/performance panels by worker/region
 
-- The collector is endpoint-template driven so it can adapt to tenant-specific CloudHub API paths.
-- If schedules are not exposed for an API, schedule fields are skipped automatically.
+This repository gives the base assets; once data is flowing with these fields, you’ll have live + historical operations visibility end to end.
