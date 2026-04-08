@@ -1,0 +1,41 @@
+{
+  "index_patterns": [
+    "mulesoft-job-runs-*"
+  ],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "environment": { "type": "keyword" },
+        "organization.id": { "type": "keyword" },
+        "api.id": { "type": "keyword" },
+        "api.name": { "type": "keyword" },
+        "job.id": { "type": "keyword" },
+        "job.name": { "type": "keyword" },
+        "job.type": { "type": "keyword" },
+        "job.status": { "type": "keyword" },
+        "job.duration_ms": { "type": "long" },
+        "schedule.id": { "type": "keyword" },
+        "schedule.name": { "type": "keyword" },
+        "schedule.cron": { "type": "keyword" },
+        "schedule.enabled": { "type": "boolean" },
+        "schedule.status": { "type": "keyword" },
+        "worker.id": { "type": "keyword" },
+        "worker.region": { "type": "keyword" },
+        "trace.id": { "type": "keyword" },
+        "error.code": { "type": "keyword" },
+        "error.message": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 1024 } } }
+      }
+    }
+  },
+  "priority": 150,
+  "version": 1,
+  "_meta": {
+    "description": "Template for MuleSoft job/schedule operations observability"
+  }
+}
