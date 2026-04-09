@@ -1,0 +1,41 @@
+{
+  "@timestamp": "2026-04-08T11:10:12Z",
+  "environment": "prod",
+  "organization": {
+    "id": "org-a1b2c3"
+  },
+  "api": {
+    "id": "api-7f1d",
+    "name": "customer-orders-api"
+  },
+  "job": {
+    "id": "run-7f14a7ef-eef6-4d80-b2eb-5f1a432a7782",
+    "name": "order-sync",
+    "type": "SCHEDULED",
+    "status": "FAILED",
+    "status_source": "logs",
+    "cloudhub_api_status": "RUNNING",
+    "duration_ms": 18231
+  },
+  "schedule": {
+    "id": "sched-101",
+    "name": "every-5-min-sync",
+    "cron": "*/5 * * * *",
+    "enabled": true,
+    "status": "LATE"
+  },
+  "worker": {
+    "id": "worker-12",
+    "region": "us-east-1"
+  },
+  "trace": {
+    "id": "6f8f4ee143a74f5bb8e62f"
+  },
+  "observed": {
+    "log_sample_size": 214
+  },
+  "error": {
+    "code": "MULE:CONNECTIVITY",
+    "message": "Failed to connect to downstream ERP service"
+  }
+}
